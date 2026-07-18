@@ -41,13 +41,17 @@ EmailSendingService/
 ├─ src/
 │  ├─ EmailSendingService.Domain          # Entidades, Value Objects, exceções de domínio
 │  ├─ EmailSendingService.Application      # DTOs, porta IEmailSender, use case SendEmail
-│  ├─ EmailSendingService.Infrastructure   # SMTP em C# puro (SmtpSession, SmtpTransport, MimeMessageBuilder)
+│  ├─ EmailSendingService.Infrastructure   # SMTP em C# puro (SmtpSession, SmtpTransport,
+│  │                                        #  MimeMessageBuilder, DnsMxResolver, DkimSigner)
 │  └─ EmailSendingService.Api              # Web API + Swagger + middleware de erros
 ├─ tests/
 │  ├─ EmailSendingService.UnitTests        # xUnit + FluentAssertions + NSubstitute
 │  ├─ EmailSendingService.BddTests         # Reqnroll (Gherkin .feature)
 │  └─ EmailSendingService.ArchTests        # NetArchTest (regras de camadas)
-├─ docker-compose.yml                      # MailHog (SMTP local para teste manual)
+├─ tools/
+│  ├─ EmailSendingService.SmtpCatcher      # Servidor SMTP local de teste (100% C#, sem Docker)
+│  └─ EmailSendingService.DkimKeygen       # Gera par de chaves DKIM + registros DNS
+├─ docker-compose.yml                      # (Opcional) MailHog como SMTP local
 ├─ sample-request.json                     # Exemplo de corpo da requisição
 ├─ run.sh / test.sh
 └─ EmailSendingService.sln
@@ -110,11 +114,7 @@ Se preferir usar um SMTP (Gmail/Outlook/MailHog), troque o modo:
 
 ### Testar localmente sem depender de nada externo
 
-Suba o MailHog (modo `Relay`, `Host=localhost`, `Port=1025`) e veja tudo em `http://localhost:8025`:
-
-```bash
-docker compose up -d
-```
+Use o **SMTP Catcher** incluído (100% C#, sem Docker) — veja a seção "Testar localmente sem servidor externo" abaixo. Alternativamente, se tiver Docker, `docker compose up -d` sobe o MailHog em `http://localhost:8025`.
 
 ## Entrega real em produção (DirectMx sem relay)
 
@@ -172,22 +172,22 @@ Com o `appsettings.Development.json` em modo `Relay` para `127.0.0.1:1025`, o PO
 ## Pré-requisitos
 
 - .NET SDK 9.0
-- (Opcional) Docker, para subir um servidor SMTP local (MailHog)
+- (Opcional) Docker, apenas se quiser usar o MailHog em vez do SMTP Catcher
 
-## Executar
+## Executar (2 terminais, a partir da raiz do projeto)
 
 ```bash
-# 1) SMTP local para capturar os e-mails (UI em http://localhost:8025)
-docker compose up -d
+# Terminal 1 — servidor SMTP local de teste (deixe rodando)
+dotnet run --project tools/EmailSendingService.SmtpCatcher
 
-# 2) subir a API (Swagger em http://localhost:5080/swagger)
+# Terminal 2 — a API (Swagger em http://localhost:5080/swagger)
 dotnet run --project src/EmailSendingService.Api
 ```
 
-Enviar um e-mail:
+O `appsettings.Development.json` já vem em modo `Relay` apontando para `127.0.0.1:1025` (o catcher). Enviar um e-mail:
 
 ```bash
-curl -X POST http://localhost:5080/api/emails \
+curl -X POST http://localhost:5080/api/Emails \
   -H "Content-Type: application/json" \
   -d @sample-request.json
 ```
@@ -203,31 +203,50 @@ Resposta (`202 Accepted`):
 }
 ```
 
-Abra `http://localhost:8025` para ver a mensagem capturada pelo MailHog.
+O catcher imprime o e-mail recebido e salva um `.eml` em `received-emails/`.
+
+### Enviar de verdade (Gmail) sem servidor de teste
+
+No `appsettings.Development.json`, use modo `Relay` com o SMTP do Gmail e uma **senha de app** (conta com 2FA). Guarde a senha em `dotnet user-secrets`, nunca no arquivo versionado:
+
+```bash
+cd src/EmailSendingService.Api
+dotnet user-secrets set "Smtp:Username" "voce@gmail.com"
+dotnet user-secrets set "Smtp:Password" "sua-senha-de-app"
+```
+
+```json
+"Smtp": { "DeliveryMode": "Relay", "Host": "smtp.gmail.com", "Port": 587, "UseStartTls": true, "DefaultFromAddress": "voce@gmail.com" }
+```
+
+No DTO, o `from` deve ser o próprio Gmail autenticado.
 
 ## Configuração (`appsettings.json` → seção `Smtp`)
 
 | Chave | Descrição |
 |-------|-----------|
-| `Host` / `Port` | Servidor SMTP (padrão `localhost:1025` = MailHog) |
+| `DeliveryMode` | `DirectMx` (MTA próprio) ou `Relay` (encaminha por outro SMTP) |
+| `DnsServer` | Servidor DNS para resolver MX no modo DirectMx (padrão `8.8.8.8`) |
+| `DirectMxPort` | Porta usada na entrega direta ao MX (padrão `25`) |
+| `Host` / `Port` | Servidor SMTP no modo Relay |
 | `UseStartTls` | `STARTTLS` em portas 25/587 |
 | `UseImplicitTls` | TLS implícito na porta 465 |
 | `Username` / `Password` | Credenciais para `AUTH LOGIN` (vazio = sem auth) |
 | `DefaultFromAddress` / `DefaultFromName` | Remetente padrão quando o DTO não informa `from` |
-| `AllowInvalidCertificates` | Aceita certificados inválidos (apenas para servidores locais) |
+| `ClientHostName` | Nome usado no EHLO/HELO (use um FQDN real em produção) |
+| `TimeoutMilliseconds` | Timeout de conexão/leitura |
+| `AllowInvalidCertificates` | Aceita certificados TLS inválidos (apenas servidores de teste) |
+| `Dkim` | Assinatura DKIM: `Enabled`, `Domain`, `Selector`, `PrivateKeyPath` |
 
-### Exemplo Gmail (produção)
+## Anexos
 
-```json
-"Smtp": {
-  "Host": "smtp.gmail.com",
-  "Port": 587,
-  "UseStartTls": true,
-  "Username": "voce@gmail.com",
-  "Password": "sua-app-password",
-  "DefaultFromAddress": "voce@gmail.com"
-}
+O DTO aceita uma lista `attachments`, cada item com `fileName`, `contentType` e `contentBase64`. Para anexar um arquivo real, gere o Base64 (ex.: PowerShell):
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\caminho\arquivo.pdf"))
 ```
+
+Itens de anexo totalmente vazios são ignorados. Com anexos, a mensagem é montada como `multipart/mixed`.
 
 ## Testes
 
@@ -235,12 +254,15 @@ Abra `http://localhost:8025` para ver a mensagem capturada pelo MailHog.
 dotnet test            # roda as 3 camadas: Unit, BDD e Arch
 ```
 
-- **UnitTests** — Value Objects, agregado, `MimeMessageBuilder`, protocolo `SmtpSession` e um teste de integração que sobe um servidor SMTP loopback e valida o envio sobre socket real.
+- **UnitTests** — Value Objects, agregado, `MimeMessageBuilder`, protocolo `SmtpSession`, parser do resolver DNS MX, assinatura DKIM (assina e **verifica** com a chave pública) e integração sobre socket real (loopback) tanto no envio relay quanto no DirectMx.
 - **BddTests** — cenários Gherkin em `Features/SendEmail.feature` (envio válido, destinatário inválido, assunto ausente).
 - **ArchTests** — garante a regra de dependência da Clean Architecture.
 
 ## Notas técnicas
 
+- No modo `DirectMx`, o `DirectSmtpEmailSender` agrupa os destinatários por domínio, resolve o MX via DNS e entrega direto no servidor de destino (um envio por MX), sem relay.
 - O envio via `STARTTLS` reaproveita o mesmo socket após o upgrade TLS. Para servidores públicos (Gmail/Outlook) use porta 587 (`UseStartTls`) ou 465 (`UseImplicitTls`).
+- Com DKIM habilitado, cada mensagem recebe um cabeçalho `DKIM-Signature` (RSA-SHA256, relaxed/relaxed) antes do envio.
 - O `Bcc` é entregue via `RCPT TO`, mas nunca aparece nos cabeçalhos da mensagem.
 - Conteúdo e anexos são codificados em Base64 (quebra em 76 colunas, conforme MIME).
+- Segredos (senha de app, chaves DKIM) ficam fora do repositório: use `dotnet user-secrets`; `*.pem`, `dkim-keys/` e `received-emails/` estão no `.gitignore`.
