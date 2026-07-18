@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EmailSendingService.Application\EmailSendingService.Application.csproj" />
+    <ProjectReference Include="..\EmailSendingService.Infrastructure\EmailSendingService.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

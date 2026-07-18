@@ -1,0 +1,12 @@
+{
+  "from": { "address": "sales@example.com", "name": "Sales Team" },
+  "to": [ { "address": "customer@example.com", "name": "Customer" } ],
+  "cc": [],
+  "bcc": [],
+  "subject": "Welcome!",
+  "body": "<h1>Hello</h1><p>Thanks for signing up.</p>",
+  "isHtml": true,
+  "attachments": [
+    { "fileName": "note.txt", "contentType": "text/plain", "contentBase64": "SGVsbG8gZnJvbSBhbiBhdHRhY2htZW50IQ==" }
+  ]
+}

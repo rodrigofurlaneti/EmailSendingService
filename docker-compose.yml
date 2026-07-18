@@ -1,0 +1,9 @@
+# Local SMTP server for manual testing. MailHog captures every message and shows
+# it in a web UI at http://localhost:8025 (nothing is sent to the real internet).
+services:
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: emailsendingservice-mailhog
+    ports:
+      - "1025:1025"   # SMTP  -> matches appsettings "Smtp:Port": 1025
+      - "8025:8025"   # Web UI
