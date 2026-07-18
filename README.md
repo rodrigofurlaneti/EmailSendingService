@@ -1,8 +1,10 @@
-# EmailSendingService
+﻿# EmailSendingService
 
 API .NET 9 que recebe um DTO de e-mail e, na camada de infraestrutura, realiza o **disparo via SMTP implementado 100% em C# puro** (sockets `TcpClient` + `SslStream`, sem MailKit e sem `System.Net.Mail`). Construída com **DDD + Clean Architecture**, boas práticas e três camadas de teste: **UnitTest, BddTest e ArchTest**.
 
 > Status: compila com 0 erros/0 warnings e **45 testes passando** (38 unit — incluindo integração sobre socket real, resolver DNS MX e assinatura DKIM verificada por criptografia —, 3 BDD, 4 de arquitetura).
+
+![CI](https://github.com/rodrigofurlaneti/EmailSendingService/actions/workflows/ci.yml/badge.svg)
 
 ## Arquitetura (a dependência aponta para dentro)
 
