@@ -2,7 +2,7 @@
 
 API .NET 9 que recebe um DTO de e-mail e, na camada de infraestrutura, realiza o **disparo via SMTP implementado 100% em C# puro** (sockets `TcpClient` + `SslStream`, sem MailKit e sem `System.Net.Mail`). Construída com **DDD + Clean Architecture**, boas práticas e três camadas de teste: **UnitTest, BddTest e ArchTest**.
 
-> Status: compila com 0 erros/0 warnings e **39 testes passando** (32 unit — incluindo um teste de integração sobre socket real —, 3 BDD, 4 de arquitetura).
+> Status: compila com 0 erros/0 warnings e **45 testes passando** (38 unit — incluindo integração sobre socket real, resolver DNS MX e assinatura DKIM verificada por criptografia —, 3 BDD, 4 de arquitetura).
 
 ## Arquitetura (a dependência aponta para dentro)
 
@@ -115,6 +115,59 @@ Suba o MailHog (modo `Relay`, `Host=localhost`, `Port=1025`) e veja tudo em `htt
 ```bash
 docker compose up -d
 ```
+
+## Entrega real em produção (DirectMx sem relay)
+
+O código é um MTA completo, mas **entregar em caixas de grandes provedores (Hotmail/Gmail) depende de infraestrutura**, não do código. De um IP residencial a entrega direta é recusada (ex.: `550 blocked using Spamhaus`). Para funcionar de verdade você precisa:
+
+1. **Host com IP dedicado e reputação limpa** (VPS/servidor), não IP residencial. Confirme que a **porta 25 de saída** está liberada (muitas clouds bloqueiam por padrão — abra um ticket).
+2. **PTR (DNS reverso)** do IP apontando para o hostname do seu servidor (`mail.seudominio.com`). Configurado no provedor do IP.
+3. **`ClientHostName`** no appsettings igual a esse FQDN (usado no EHLO/HELO).
+4. **SPF** — TXT no domínio: `v=spf1 ip4:SEU.IP -all`.
+5. **DKIM** — assine as mensagens (suporte nativo, abaixo) e publique a chave pública em `<selector>._domainkey.seudominio.com`.
+6. **DMARC** — TXT em `_dmarc.seudominio.com`: `v=DMARC1; p=none; rua=mailto:postmaster@seudominio.com`.
+
+Com esses seis itens, o modo `DirectMx` entrega direto no MX do destinatário, **sem nenhum SMTP externo**.
+
+### Assinatura DKIM (100% C#)
+
+Gerar o par de chaves e ver os registros DNS a publicar:
+
+```bash
+dotnet run --project tools/EmailSendingService.DkimKeygen -- seudominio.com default
+```
+
+Isso salva a chave privada em `dkim-keys/` e imprime o TXT do DKIM (+ sugestões de SPF/DMARC). Depois habilite no `appsettings.json`:
+
+```json
+"Smtp": {
+  "DeliveryMode": "DirectMx",
+  "ClientHostName": "mail.seudominio.com",
+  "DefaultFromAddress": "no-reply@seudominio.com",
+  "Dkim": {
+    "Enabled": true,
+    "Domain": "seudominio.com",
+    "Selector": "default",
+    "PrivateKeyPath": "dkim-keys/default.seudominio.com.private.pem"
+  }
+}
+```
+
+A assinatura usa RSA-SHA256 com canonicalização relaxed/relaxed (`Smtp/DkimSigner.cs`), assinando os cabeçalhos `from:to:cc:subject:date:message-id` e o hash do corpo.
+
+## Testar localmente sem servidor externo (SMTP Catcher)
+
+Sem Docker e sem ferramentas de terceiros — um catcher SMTP próprio, 100% C#, em `tools/EmailSendingService.SmtpCatcher`. Rode da **raiz do projeto**:
+
+```bash
+# Terminal 1 (deixe rodando)
+dotnet run --project tools/EmailSendingService.SmtpCatcher
+
+# Terminal 2
+dotnet run --project src/EmailSendingService.Api
+```
+
+Com o `appsettings.Development.json` em modo `Relay` para `127.0.0.1:1025`, o POST em `/api/Emails` cai no catcher, que imprime o e-mail e salva um `.eml` em `received-emails/`. Serve para validar toda a cadeia (DTO → domínio → MIME → SMTP) sem depender de reputação de IP.
 
 ## Pré-requisitos
 

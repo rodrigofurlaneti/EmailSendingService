@@ -3,3 +3,10 @@ obj/
 *.user
 .vs/
 TestResults/
+
+# Segredos e artefatos de teste — nunca versionar
+received-emails/
+dkim-keys/
+*.pem
+appsettings.*.local.json
+secrets.json

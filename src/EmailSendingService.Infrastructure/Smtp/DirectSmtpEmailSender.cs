@@ -34,7 +34,7 @@ public sealed class DirectSmtpEmailSender : IEmailSender
 
     public async Task<EmailDeliveryResult> SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
-        var mime = MimeMessageBuilder.Build(message);
+        var mime = DkimSigner.ApplyIfEnabled(MimeMessageBuilder.Build(message), _settings.Dkim);
         var replies = new List<string>();
 
         var byDomain = message.AllRecipients()

@@ -30,7 +30,7 @@ public sealed class SmtpEmailSender : IEmailSender
     public async Task<EmailDeliveryResult> SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
         var replies = new List<string>();
-        var mime = MimeMessageBuilder.Build(message);
+        var mime = DkimSigner.ApplyIfEnabled(MimeMessageBuilder.Build(message), _settings.Dkim);
 
         await using var transport = _transportFactory(_settings);
 

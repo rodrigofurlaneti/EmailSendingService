@@ -29,10 +29,19 @@ public sealed class SmtpTransport : IAsyncDisposable
         var transcript = new List<string>();
 
         _tcp = new TcpClient { SendTimeout = _settings.TimeoutMilliseconds, ReceiveTimeout = _settings.TimeoutMilliseconds };
-        using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+        try
         {
+            using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             connectCts.CancelAfter(_settings.TimeoutMilliseconds);
             await _tcp.ConnectAsync(_settings.Host, _settings.Port, connectCts.Token);
+        }
+        catch (Exception ex) when (ex is SocketException or OperationCanceledException)
+        {
+            throw new SmtpException(
+                $"Não foi possível conectar ao servidor SMTP em {_settings.Host}:{_settings.Port}. " +
+                "No modo Relay, confirme que o servidor SMTP (ex.: o SMTP Catcher em tools/EmailSendingService.SmtpCatcher) " +
+                "está rodando e escutando nessa porta. No modo DirectMx, o servidor de destino recusou a conexão ou a porta 25 está bloqueada.",
+                inner: ex);
         }
 
         _stream = _tcp.GetStream();

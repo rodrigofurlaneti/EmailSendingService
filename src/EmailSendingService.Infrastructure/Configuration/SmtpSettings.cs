@@ -55,4 +55,7 @@ public sealed class SmtpSettings
 
     /// <summary>DANGER: accept any TLS certificate. Only for local test servers (e.g. MailHog/Papercut).</summary>
     public bool AllowInvalidCertificates { get; set; } = false;
+
+    /// <summary>DKIM signing options (improves deliverability in DirectMx mode).</summary>
+    public DkimOptions Dkim { get; set; } = new();
 }
