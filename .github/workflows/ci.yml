@@ -1,0 +1,62 @@
+name: CI
+
+# Roda em pushes e pull requests para a branch main.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Cancela execuções antigas do mesmo branch/PR quando um novo push chega.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore EmailSendingService.sln
+
+      - name: Build (Release, warnings as errors)
+        run: dotnet build EmailSendingService.sln --configuration Release --no-restore -warnaserror
+
+      - name: Test (Release)
+        run: >
+          dotnet test EmailSendingService.sln
+          --configuration Release
+          --no-build
+          --verbosity normal
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory ./TestResults
+
+      - name: Build tools (SmtpCatcher e DkimKeygen)
+        run: |
+          dotnet build tools/EmailSendingService.SmtpCatcher/EmailSendingService.SmtpCatcher.csproj --configuration Release
+          dotnet build tools/EmailSendingService.DkimKeygen/EmailSendingService.DkimKeygen.csproj --configuration Release
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ./TestResults/**/*.trx
+          if-no-files-found: warn
