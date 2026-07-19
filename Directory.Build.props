@@ -7,4 +7,18 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
+
+  <!-- Metadados de pacote NuGet (GitHub Packages). Por padrão nada é empacotado; -->
+  <!-- cada biblioteca publicável define <IsPackable>true</IsPackable> no seu .csproj. -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <Version>1.0.0</Version>
+    <Authors>Rodrigo Furlaneti</Authors>
+    <Company>Rodrigo Furlaneti</Company>
+    <RepositoryUrl>https://github.com/rodrigofurlaneti/EmailSendingService</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
 </Project>
