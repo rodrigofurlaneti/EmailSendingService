@@ -71,7 +71,7 @@ jobs:
           port: 22
           script: |
             set -e
-            IMAGE="ghcr.io/${{ github.repository }}:latest"
+            IMAGE="ghcr.io/rodrigofurlaneti/emailsendingservice:latest"
 
             # Autentica no GHCR (PAT com read:packages)
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
