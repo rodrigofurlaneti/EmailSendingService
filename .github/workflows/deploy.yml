@@ -74,18 +74,18 @@ jobs:
             IMAGE="ghcr.io/rodrigofurlaneti/emailsendingservice:latest"
 
             # Autentica no GHCR (PAT com read:packages)
-            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "${{ secrets.GHCR_PAT }}" | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            docker pull "$IMAGE"
-            docker rm -f emailsendingservice-api || true
-            docker run -d \
+            sudo docker pull "$IMAGE"
+            sudo docker rm -f emailsendingservice-api || true
+            sudo docker run -d \
               --name emailsendingservice-api \
               --restart unless-stopped \
               -p 80:8080 \
               --env-file /opt/emailservice/.env \
               "$IMAGE"
 
-            docker image prune -f
+            sudo docker image prune -f
 
             # Verificação rápida do health
             sleep 5
