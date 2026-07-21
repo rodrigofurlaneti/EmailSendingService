@@ -1,0 +1,11 @@
+# Compose de PRODUÇÃO — vai para a VM em /opt/emailservice/docker-compose.yml
+# (não confundir com o docker-compose.yml da raiz, que é o MailHog de teste local)
+services:
+  api:
+    image: ghcr.io/rodrigofurlaneti/emailsendingservice:latest
+    container_name: emailsendingservice-api
+    restart: unless-stopped
+    ports:
+      - "80:8080"
+    env_file:
+      - /opt/emailservice/.env

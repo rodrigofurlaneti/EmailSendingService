@@ -1,0 +1,89 @@
+name: Deploy to Azure VM
+
+# Publica a API na VM Azure após um build/test verde na main,
+# ou manualmente pela aba Actions.
+on:
+  workflow_run:
+    workflows: [ "CI" ]        # espera o workflow ci.yml passar
+    types: [ completed ]
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}   # rodrigofurlaneti/emailsendingservice
+
+jobs:
+  build-and-push:
+    name: Build & Push image (GHCR)
+    runs-on: ubuntu-latest
+    # Só roda se o CI passou (ou se foi disparo manual)
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadados/tags da imagem
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: Build e push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy via SSH
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy na VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            IMAGE="ghcr.io/${{ github.repository }}:latest"
+
+            # Autentica no GHCR (PAT com read:packages)
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            docker pull "$IMAGE"
+            docker rm -f emailsendingservice-api || true
+            docker run -d \
+              --name emailsendingservice-api \
+              --restart unless-stopped \
+              -p 80:8080 \
+              --env-file /opt/emailservice/.env \
+              "$IMAGE"
+
+            docker image prune -f
+
+            # Verificação rápida do health
+            sleep 5
+            curl -fsS http://localhost/health && echo " -> OK"
